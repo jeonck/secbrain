@@ -134,7 +134,8 @@ jobs:
           [ -n "${ISSUE_NUM:-}" ] && msg="$msg (#$ISSUE_NUM)"
           git commit -m "$msg"
 
-          # Pages 워크플로가 이 push로 트리거됩니다.
+          # 이 push는 Pages 워크플로를 트리거하지 않습니다(GITHUB_TOKEN 재귀 방지).
+          # 배포는 아래 publish 잡이 pages.yml을 직접 호출해 잇습니다.
           git pull --rebase --autostash origin main
           git push origin HEAD:main
 
@@ -181,3 +182,5 @@ jobs:
       pages: write
       id-token: write
     uses: ./.github/workflows/pages.yml
+    with:
+      ref: main
