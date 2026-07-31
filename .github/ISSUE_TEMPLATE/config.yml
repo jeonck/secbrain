@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: 🌐 세컨드 브레인 사이트
+    url: https://jeonck.github.io/secbrain/
+    about: 노트, 그래프, 태스크를 브라우저에서 봅니다.
+  - name: 📖 설정 가이드
+    url: https://github.com/jeonck/secbrain/blob/main/SETUP.md
+    about: OAuth 토큰 발급과 Pages 활성화 절차.

@@ -1,0 +1,25 @@
+name: 📦 지식 통합
+description: 흩어진 노트를 재사용 가능한 프레임워크로 승격시킵니다. (매월 1일 자동으로도 돕니다)
+title: "지식 통합 요청"
+labels: ["consolidate"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        승격 기준은 셋 **모두** 만족해야 합니다 — 3개 이상 노트에서 반복 · 2주 이상 지속 ·
+        일반화했을 때 다음 상황에 실제 적용 가능. 기준에 못 미치면 통합하지 않는 게 맞습니다.
+
+  - type: input
+    id: topic
+    attributes:
+      label: 주제 (선택)
+      description: 비워 두면 vault 전체에서 군집을 찾습니다.
+      placeholder: 에이전트 비용 구조
+
+  - type: checkboxes
+    id: ack
+    attributes:
+      label: 확인
+      options:
+        - label: 원본 노트는 삭제되지 않고 프레임워크로의 링크만 추가된다는 것을 이해합니다.
+          required: true

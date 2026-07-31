@@ -1,0 +1,15 @@
+{
+  "name": "secbrain",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Markdown + Git + Claude second brain, published as a GitHub Pages digital garden",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "serve": "node scripts/build.mjs && node --run serve:only",
+    "serve:only": "npx --yes serve dist"
+  },
+  "dependencies": {
+    "marked": "^15.0.0"
+  }
+}

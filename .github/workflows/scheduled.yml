@@ -1,0 +1,75 @@
+name: Claude Scheduled
+
+# 캡처 → 주간 분석 → 월간 통합 → 다시 캡처. 예약된 반성 루프.
+# 온디맨드 워크플로를 재사용하려면 이 파일 대신 그쪽 workflow_dispatch를 써도 됩니다.
+
+on:
+  schedule:
+    - cron: "0 21 * * *"   # 매일 06:00 KST — 데일리 브리프
+    - cron: "0 22 * * 0"   # 일요일 07:00 KST — 위클리 리뷰
+    - cron: "0 23 1 * *"   # 매월 1일 08:00 KST — 지식 통합
+  workflow_dispatch:
+
+concurrency:
+  group: vault-write
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  id-token: write
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: 어떤 스킬을 돌릴지 결정
+        id: pick
+        run: |
+          case "${{ github.event.schedule }}" in
+            "0 22 * * 0") skill=weekly-review ;;
+            "0 23 1 * *") skill=consolidate ;;
+            *)            skill=daily-brief ;;
+          esac
+          echo "skill=$skill" >> "$GITHUB_OUTPUT"
+          echo "예약 실행: $skill"
+
+      - name: Claude 실행
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          prompt: |
+            이 저장소는 마크다운 세컨드 브레인 vault입니다. 먼저 CLAUDE.md를 읽고 규약을 따르세요.
+
+            .claude/skills/${{ steps.pick.outputs.skill }}/SKILL.md 를 읽고 그 절차를 정확히 수행하세요.
+            예약 실행이므로 사용자 입력은 없습니다. vault의 기존 노트가 유일한 입력입니다.
+
+            제약:
+            - vault 폴더 안에서만 쓰기. .github/, scripts/, site/ 는 건드리지 마세요.
+            - 파일을 삭제하지 마세요.
+            - 커밋·푸시하지 마세요. 파일만 남기면 다음 단계가 처리합니다.
+            - 오늘 날짜의 결과물이 이미 있으면 새로 만들지 말고 그 파일을 갱신하세요.
+          claude_args: |
+            --model claude-sonnet-5
+            --allowedTools Read,Write,Edit,Glob,Grep,WebSearch,WebFetch,TodoWrite
+
+      - name: 변경사항 커밋
+        env:
+          SKILL: ${{ steps.pick.outputs.skill }}
+        run: |
+          set -euo pipefail
+          git config user.name  "secbrain-agent[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -- .github scripts site package.json package-lock.json site.config.json CLAUDE.md 2>/dev/null || true
+
+          if git diff --quiet && [ -z "$(git ls-files --others --exclude-standard)" ]; then
+            echo "변경 없음 — 커밋을 건너뜁니다."
+            exit 0
+          fi
+          git add -A
+          git commit -m "$SKILL: 예약 실행 $(date -u +%Y-%m-%d)"
+          git pull --rebase --autostash origin main
+          git push origin HEAD:main

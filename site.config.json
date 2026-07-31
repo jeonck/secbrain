@@ -1,0 +1,16 @@
+{
+  "title": "secbrain",
+  "tagline": "Markdown, Git, 그리고 에이전트 하나로 굴러가는 세컨드 브레인",
+  "owner": "jeonck",
+  "repo": "secbrain",
+  "branch": "main",
+  "locale": "ko-KR",
+  "folders": {
+    "00-inbox": { "label": "Inbox", "domain": "inbox", "color": "amber", "hint": "아직 분류되지 않은 캡처" },
+    "01-projects": { "label": "Projects", "domain": "projects", "color": "violet", "hint": "끝이 있는 일" },
+    "02-areas": { "label": "Areas", "domain": "areas", "color": "teal", "hint": "계속 유지하는 영역" },
+    "03-resources": { "label": "Resources", "domain": "resources", "color": "blue", "hint": "참고 자료와 프레임워크" },
+    "04-archive": { "label": "Archive", "domain": "archive", "color": "slate", "hint": "끝났지만 보관" },
+    "05-daily": { "label": "Daily", "domain": "daily", "color": "rose", "hint": "일지와 브리프" }
+  }
+}

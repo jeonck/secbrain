@@ -1,0 +1,25 @@
+name: 📰 데일리 브리프
+description: 관심사 기반 뉴스 브리프를 지금 생성합니다. (매일 아침 자동으로도 돕니다)
+title: "데일리 브리프 요청"
+labels: ["daily-brief"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        `02-areas/interests.md` 의 주제를 읽어 검색합니다. **출처 필수 · 7일 신선도 · 항목별 신뢰도** 가 규칙입니다.
+        브리프에 나오는 주제를 바꾸려면 그 파일을 고치세요.
+
+  - type: textarea
+    id: focus
+    attributes:
+      label: 오늘만 특별히 볼 것 (선택)
+      description: 비워 두면 선언된 관심사 전체를 훑습니다.
+      placeholder: 오늘은 에이전트 오케스트레이션 쪽만 깊게 봐줘
+
+  - type: checkboxes
+    id: ack
+    attributes:
+      label: 확인
+      options:
+        - label: 신뢰도 '낮음' 항목은 내가 직접 출처를 확인하겠습니다.
+          required: true

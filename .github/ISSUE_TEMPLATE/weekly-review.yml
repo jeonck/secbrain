@@ -1,0 +1,23 @@
+name: 🔍 위클리 리뷰
+description: 지난 7일 노트를 도메인 가로질러 교차 분석합니다. (일요일 아침 자동으로도 돕니다)
+title: "위클리 리뷰 요청"
+labels: ["weekly-review"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        요약이 아니라 **교차 참조** 가 목적입니다. 한 주 노트를 다시 나열하는 건 가치가 없습니다 —
+        서로 다른 폴더에 흩어져서 놓친 연결을 찾습니다.
+
+  - type: input
+    id: window
+    attributes:
+      label: 기간 (선택)
+      description: 비워 두면 최근 7일.
+      placeholder: 2026-07-20 ~ 2026-07-26
+
+  - type: textarea
+    id: question
+    attributes:
+      label: 특별히 답을 원하는 질문 (선택)
+      placeholder: 이번 달에 왜 프로젝트 진도가 안 나갔는지 노트에서 근거를 찾아줘
