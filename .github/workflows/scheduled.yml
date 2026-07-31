@@ -21,6 +21,8 @@ permissions:
 jobs:
   run:
     runs-on: ubuntu-latest
+    outputs:
+      changed: ${{ steps.commit.outputs.changed }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -41,6 +43,8 @@ jobs:
         uses: anthropics/claude-code-action@v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          # 공식 Claude GitHub App 설치 없이 러너 토큰으로 동작시킵니다.
+          github_token: ${{ secrets.GITHUB_TOKEN }}
           prompt: |
             이 저장소는 마크다운 세컨드 브레인 vault입니다. 먼저 CLAUDE.md를 읽고 규약을 따르세요.
 
@@ -57,6 +61,7 @@ jobs:
             --allowedTools Read,Write,Edit,Glob,Grep,WebSearch,WebFetch,TodoWrite
 
       - name: 변경사항 커밋
+        id: commit
         env:
           SKILL: ${{ steps.pick.outputs.skill }}
         run: |
@@ -66,6 +71,7 @@ jobs:
           git checkout -- .github scripts site package.json package-lock.json site.config.json CLAUDE.md 2>/dev/null || true
 
           if git diff --quiet && [ -z "$(git ls-files --others --exclude-standard)" ]; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
             echo "변경 없음 — 커밋을 건너뜁니다."
             exit 0
           fi
@@ -73,3 +79,13 @@ jobs:
           git commit -m "$SKILL: 예약 실행 $(date -u +%Y-%m-%d)"
           git pull --rebase --autostash origin main
           git push origin HEAD:main
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+
+  publish:
+    needs: run
+    if: needs.run.outputs.changed == 'true'
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    uses: ./.github/workflows/pages.yml

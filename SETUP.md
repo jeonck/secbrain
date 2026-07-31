@@ -29,6 +29,10 @@ gh secret set CLAUDE_CODE_OAUTH_TOKEN --repo jeonck/secbrain
 
 토큰은 만료됩니다. 워크플로가 인증 오류로 실패하면 `claude setup-token`을 다시 돌려 시크릿을 갱신하세요.
 
+> **Claude GitHub App은 설치하지 않아도 됩니다.** 워크플로가 `github_token`으로 러너 토큰을 넘기기 때문입니다.
+> 커밋과 이슈 코멘트는 워크플로가 직접 처리하므로 `claude[bot]` 신원이 필요 없습니다.
+> 앱을 설치하지 않으면 `Claude Code is not installed on this repository` 에러가 나는데, 이 입력이 그 경로를 우회합니다.
+
 ---
 
 ## 2. Actions에 쓰기 권한 주기
