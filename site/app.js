@@ -244,7 +244,7 @@ function viewGraph() {
 async function viewNote(slug) {
   let n = noteCache.get(slug);
   if (!n) {
-    const res = await fetch(`data/notes/${encodeURIComponent(slug)}.json`);
+    const res = await fetch(`data/notes/${encodeURIComponent(slug)}.json`, { cache: "no-cache" });
     if (!res.ok) return `<div class="empty-state">노트를 찾을 수 없습니다: ${esc(slug)}</div>`;
     n = await res.json();
     noteCache.set(slug, n);
@@ -675,7 +675,9 @@ document.addEventListener("keydown", (e) => {
 
 (async function boot() {
   try {
-    DB = await (await fetch("data/index.json")).json();
+    // no-cache = 조건부 GET. 에이전트가 방금 커밋한 노트가 Pages의 캐시 때문에
+    // 몇 분간 안 보이는 것을 막습니다 (변경 없으면 304라 비용은 거의 없습니다).
+    DB = await (await fetch("data/index.json", { cache: "no-cache" })).json();
   } catch {
     $("#main").innerHTML = `<div class="empty-state">
       데이터를 불러오지 못했습니다. <code>node scripts/build.mjs</code> 로 <code>dist/</code>를 만든 뒤 그 폴더를 서빙해야 합니다.
