@@ -86,7 +86,14 @@ function extractTasks(body) {
     const due = text.match(/📅\s*(\d{4}-\d{2}-\d{2})/);
     tasks.push({
       done: m[1].toLowerCase() === "x",
-      text: text.replace(/📅\s*\d{4}-\d{2}-\d{2}/, "").trim(),
+      // 대시보드는 평문으로 보여주므로 위키링크·강조 기호를 벗깁니다.
+      text: text
+        .replace(/📅\s*\d{4}-\d{2}-\d{2}/, "")
+        .replace(/\[\[([^\]|#]+)(?:[#|]([^\]]*))?\]\]/g, (_a, t, alias) => (alias || t).trim())
+        .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
+        .replace(/[*_`]/g, "")
+        .replace(/\s+/g, " ")
+        .trim(),
       due: due ? due[1] : null,
     });
   }
