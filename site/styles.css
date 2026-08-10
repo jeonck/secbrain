@@ -21,6 +21,7 @@
   --d-resources: #2563c9;
   --d-archive: #6b7280;
   --d-daily: #c2325f;
+  --d-answers: #17803d;
 
   --radius: 12px;
   --radius-lg: 16px;
@@ -53,6 +54,7 @@
     --d-resources: #6fa4f5;
     --d-archive: #9aa2ae;
     --d-daily: #f0709a;
+    --d-answers: #55c98a;
     --shadow: 0 1px 2px rgb(0 0 0 / .4), 0 8px 24px -12px rgb(0 0 0 / .7);
   }
 }
@@ -64,7 +66,7 @@
   --accent: #6b4dfa; --accent-soft: #efeaff;
   --ok: #1f8a5c; --warn: #b26a00; --danger: #c02b2b;
   --d-inbox: #b8860b; --d-projects: #6b4dfa; --d-areas: #0d8b8b;
-  --d-resources: #2563c9; --d-archive: #6b7280; --d-daily: #c2325f;
+  --d-resources: #2563c9; --d-archive: #6b7280; --d-daily: #c2325f; --d-answers: #17803d;
   --shadow: 0 1px 2px rgb(0 0 0 / .05), 0 8px 24px -12px rgb(0 0 0 / .12);
 }
 :root[data-theme="dark"] {
@@ -74,7 +76,7 @@
   --accent: #9b86ff; --accent-soft: #241d47;
   --ok: #4ec98d; --warn: #e0a54a; --danger: #f0736f;
   --d-inbox: #d9a63c; --d-projects: #9b86ff; --d-areas: #3fc4c4;
-  --d-resources: #6fa4f5; --d-archive: #9aa2ae; --d-daily: #f0709a;
+  --d-resources: #6fa4f5; --d-archive: #9aa2ae; --d-daily: #f0709a; --d-answers: #55c98a;
   --shadow: 0 1px 2px rgb(0 0 0 / .4), 0 8px 24px -12px rgb(0 0 0 / .7);
 }
 
@@ -228,6 +230,7 @@ code { font-family: var(--mono); font-size: .89em; background: var(--bg-sunk); p
 .d-inbox { --dc: var(--d-inbox); } .d-projects { --dc: var(--d-projects); }
 .d-areas { --dc: var(--d-areas); } .d-resources { --dc: var(--d-resources); }
 .d-archive { --dc: var(--d-archive); } .d-daily { --dc: var(--d-daily); }
+.d-answers { --dc: var(--d-answers); }
 
 /* ---------- filters ---------- */
 
@@ -356,6 +359,11 @@ code { font-family: var(--mono); font-size: .89em; background: var(--bg-sunk); p
 .palette-results .s { font-size: 11.5px; color: var(--ink-3); margin-top: 2px;
   display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; }
 .palette-results mark { background: color-mix(in srgb, var(--accent) 26%, transparent); color: inherit; border-radius: 3px; padding: 0 2px; }
+.palette-results .t { min-width: 0; }
+.palette-results .partial {
+  font-size: 10px; padding: 1px 6px; border-radius: 999px; flex-shrink: 0;
+  border: 1px solid var(--line-strong); color: var(--ink-3);
+}
 .palette-foot { border-top: 1px solid var(--line); padding: 8px 14px; font-size: 11.5px; color: var(--ink-3); display: flex; gap: 6px; align-items: center; }
 .palette-empty { padding: 26px 18px; text-align: center; color: var(--ink-3); font-size: 13px; }
 

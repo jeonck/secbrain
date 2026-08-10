@@ -7,6 +7,7 @@ import { existsSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { marked } from "marked";
+import { tokenize } from "../site/tokenize.js";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const DIST = path.join(ROOT, "dist");
@@ -268,16 +269,64 @@ const index = {
     words: n.words,
     tasksOpen: n.tasks.filter((t) => !t.done).length,
     linkCount: n.resolved.length + backlinks.get(n.slug).length,
-    // 검색용 평문 — 코드 블록과 마크다운 기호를 걷어낸 소문자 본문
-    search: (n.title + " " + n.summary + " " + n.tags.join(" ") + " " + stripCode(n.body))
-      .replace(/[#*_>`\[\]()|-]/g, " ")
-      .replace(/\s+/g, " ")
-      .toLowerCase()
-      .slice(0, 4000),
   })),
 };
 
 await writeFile(path.join(DIST, "data", "index.json"), JSON.stringify(index));
+
+/* ---------- BM25 검색 색인 ---------- */
+
+// 별도 파일로 뺍니다. 대시보드 첫 로드에는 필요 없고, 검색창을 처음 열 때만 받습니다.
+// 본문을 자르지 않으므로(예전엔 4000자에서 잘렸습니다) 긴 브리프의 뒷부분도 검색됩니다.
+
+const plain = (n) =>
+  stripCode(n.body)
+    .replace(/^---[\s\S]*?---/, "")
+    .replace(/!?\[\[([^\]|#]+)(?:[#|][^\]]*)?\]\]/g, "$1")
+    .replace(/!?\[([^\]]*)\]\([^)]*\)/g, "$1")
+    .replace(/^[ \t]*[>|#]+[ \t]*/gm, "")
+    .replace(/[*_~`]/g, "")
+    .replace(/[ \t]+/g, " ")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+
+// 필드 가중치 — 제목에 있는 말이 본문 한가운데 있는 말보다 중요합니다 (BM25F 흉내).
+const FIELD_WEIGHT = { title: 4, tags: 3, summary: 3, body: 1 };
+
+const postings = new Map(); // term -> [[docIndex, weightedTf], ...]
+const docLen = [];
+const docs = [];
+
+notes.forEach((n, i) => {
+  const text = plain(n);
+  const tf = new Map();
+
+  const add = (str, weight) => {
+    for (const t of tokenize(str)) tf.set(t, (tf.get(t) || 0) + weight);
+  };
+  add(n.title, FIELD_WEIGHT.title);
+  add(n.tags.join(" "), FIELD_WEIGHT.tags);
+  add(n.summary, FIELD_WEIGHT.summary);
+  add(text, FIELD_WEIGHT.body);
+
+  let len = 0;
+  for (const [term, w] of tf) {
+    len += w;
+    if (!postings.has(term)) postings.set(term, []);
+    postings.get(term).push([i, w]);
+  }
+  docLen.push(len);
+  docs.push({ slug: n.slug, title: n.title, domain: n.domain, date: n.date, summary: n.summary, text });
+});
+
+const searchIndex = {
+  docs,
+  docLen,
+  avgdl: docLen.length ? docLen.reduce((a, b) => a + b, 0) / docLen.length : 0,
+  postings: Object.fromEntries(postings),
+};
+
+await writeFile(path.join(DIST, "data", "search.json"), JSON.stringify(searchIndex));
 
 for (const n of notes) {
   await writeFile(
@@ -305,7 +354,11 @@ for (const n of notes) {
 await cp(path.join(DIST, "index.html"), path.join(DIST, "404.html"));
 await writeFile(path.join(DIST, ".nojekyll"), "");
 
+const kb = (o) => (JSON.stringify(o).length / 1024).toFixed(0);
 console.log(
   `built ${notes.length} notes · ${edges.length} links · ${stats.tasksOpen} open tasks · ${index.tags.length} tags`
+);
+console.log(
+  `  index ${kb(index)}KB · search ${kb(searchIndex)}KB (${postings.size} terms, 지연 로드)`
 );
 if (missing.size) console.log(`  unresolved wikilinks: ${[...missing].join(", ")}`);

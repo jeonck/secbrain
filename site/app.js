@@ -1,5 +1,7 @@
 /* secbrain — 정적 SPA. 빌드가 만든 data/*.json 만 읽습니다. 런타임에 LLM을 부르지 않습니다. */
 
+import { tokenize, queryRuns } from "./tokenize.js";
+
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 const esc = (s) =>
@@ -48,6 +50,84 @@ function dueLabel(due) {
 const ghBase = () => `https://github.com/${DB.config.owner}/${DB.config.repo}`;
 const issueUrl = (template, title) =>
   `${ghBase()}/issues/new?template=${encodeURIComponent(template)}&title=${encodeURIComponent(title)}`;
+
+/* ---------- BM25 검색 ---------- */
+
+// 색인은 검색을 처음 쓸 때만 받습니다. 대시보드 첫 로드에는 필요 없습니다.
+let SEARCH = null;
+let searchLoading = null;
+
+function loadSearch() {
+  if (SEARCH) return Promise.resolve(SEARCH);
+  if (!searchLoading) {
+    searchLoading = fetch("data/search.json", { cache: "no-cache" })
+      .then((r) => r.json())
+      .then((j) => (SEARCH = j))
+      .catch(() => (SEARCH = { docs: [], docLen: [], avgdl: 1, postings: {} }));
+  }
+  return searchLoading;
+}
+
+const K1 = 1.2;
+const B = 0.75;
+
+// 반환: [{ doc, score, coverage }] — 점수 내림차순.
+function bm25(query) {
+  if (!SEARCH || !SEARCH.docs.length) return [];
+  const terms = [...new Set(tokenize(query))];
+  if (!terms.length) return [];
+
+  const N = SEARCH.docs.length;
+  const score = new Map();
+  const matched = new Map();
+
+  for (const term of terms) {
+    const post = SEARCH.postings[term];
+    if (!post) continue;
+    const idf = Math.log(1 + (N - post.length + 0.5) / (post.length + 0.5));
+    for (const [d, tf] of post) {
+      const denom = tf + K1 * (1 - B + (B * SEARCH.docLen[d]) / SEARCH.avgdl);
+      score.set(d, (score.get(d) || 0) + (idf * tf * (K1 + 1)) / denom);
+      matched.set(d, (matched.get(d) || 0) + 1);
+    }
+  }
+
+  // 질의어를 더 많이 덮는 노트를 끌어올립니다. 이게 없으면 흔한 조각 하나가
+  // 여러 번 나온 노트가, 질의 대부분을 담은 노트를 이길 수 있습니다.
+  const ranked = [...score.entries()]
+    .map(([d, s]) => {
+      const coverage = matched.get(d) / terms.length;
+      return { doc: SEARCH.docs[d], score: s * (0.4 + 0.6 * coverage), coverage };
+    })
+    .sort((a, b) => b.score - a.score || (a.doc.date < b.doc.date ? 1 : -1));
+
+  // 바이그램 색인은 재현율이 높은 대신 약한 일치를 많이 끌고 옵니다.
+  // 1등 점수 대비 컷을 둬서 꼬리를 자릅니다 — 없으면 vault 대부분이 매번 결과로 나옵니다.
+  if (!ranked.length) return ranked;
+  const cut = ranked[0].score * 0.3;
+  return ranked.filter((h) => h.score >= cut);
+}
+
+// 원문에서 질의어가 실제로 등장하는 자리를 잘라 옵니다.
+// 바이그램 매칭만으로 걸린 경우엔 보여줄 자리가 없으므로 summary로 물러섭니다.
+function snippet(doc, query, len = 110) {
+  const runs = queryRuns(query);
+  const hay = doc.text || "";
+  let at = -1;
+  let hitLen = 0;
+  for (const r of runs) {
+    const i = hay.toLowerCase().indexOf(r.toLowerCase());
+    if (i >= 0) { at = i; hitLen = r.length; break; }
+  }
+  if (at < 0) return { text: doc.summary || hay.slice(0, len), mark: null };
+
+  const start = Math.max(0, at - Math.floor((len - hitLen) / 2));
+  const raw = hay.slice(start, start + len).replace(/\s+/g, " ").trim();
+  return {
+    text: (start > 0 ? "… " : "") + raw + (start + len < hay.length ? " …" : ""),
+    mark: hay.substr(at, hitLen),
+  };
+}
 
 function noteCard(n) {
   return `<a class="card" href="#/note/${encodeURIComponent(n.slug)}">
@@ -147,15 +227,21 @@ function emptyVault() {
   </div>`;
 }
 
-function viewNotes(params) {
+async function viewNotes(params) {
   const folder = params.get("folder");
   const tag = params.get("tag");
-  const q = (params.get("q") || "").toLowerCase();
+  const q = (params.get("q") || "").trim();
 
   let list = DB.notes;
   if (folder) list = list.filter((n) => n.folder === folder);
   if (tag) list = list.filter((n) => n.tags.includes(tag));
-  if (q) list = list.filter((n) => n.search.includes(q));
+
+  // 질의가 있으면 목록도 팔레트와 같은 BM25 순위를 따릅니다 — 두 곳이 다르게 동작하면 헷갈립니다.
+  if (q) {
+    await loadSearch();
+    const rank = new Map(bm25(q).map((h, i) => [h.doc.slug, i]));
+    list = list.filter((n) => rank.has(n.slug)).sort((a, b) => rank.get(a.slug) - rank.get(b.slug));
+  }
 
   const chips = Object.entries(DB.config.folders)
     .map(
@@ -167,7 +253,7 @@ function viewNotes(params) {
   return `
   <div class="page-head">
     <h1>노트</h1>
-    <p>${list.length}개 표시 중 ${folder || tag || q ? `· <a href="#/notes" style="color:var(--accent)">필터 해제</a>` : `· 전체 ${DB.notes.length}개`}</p>
+    <p>${list.length}개 표시 중 ${q ? `· <strong>${esc(q)}</strong> 관련도순` : ""} ${folder || tag || q ? `· <a href="#/notes" style="color:var(--accent)">필터 해제</a>` : `· 전체 ${DB.notes.length}개`}</p>
   </div>
   <div class="filters">
     <button class="chip" data-folder="" aria-pressed="${!folder}">전체</button>
@@ -312,7 +398,7 @@ async function render() {
     html = await viewNote(decodeURIComponent(parts[1]));
   } else if (parts[0] === "notes") {
     view = "notes";
-    html = viewNotes(params);
+    html = await viewNotes(params);
   } else if (parts[0] === "graph") {
     view = "graph";
     html = viewGraph();
@@ -568,49 +654,54 @@ let pSel = 0, pHits = [];
 function openPalette() {
   palette.hidden = false;
   pInput.value = "";
+  loadSearch(); // 타이핑을 시작하기 전에 미리 받아 둡니다
   runSearch("");
   pInput.focus();
 }
 const closePalette = () => (palette.hidden = true);
 
-function highlight(text, q) {
-  if (!q) return esc(text);
-  const i = text.toLowerCase().indexOf(q);
+function highlight(text, needle) {
+  if (!needle) return esc(text);
+  const i = text.toLowerCase().indexOf(needle.toLowerCase());
   if (i < 0) return esc(text);
-  return esc(text.slice(0, i)) + "<mark>" + esc(text.slice(i, i + q.length)) + "</mark>" + esc(text.slice(i + q.length));
+  return (
+    esc(text.slice(0, i)) +
+    "<mark>" +
+    esc(text.slice(i, i + needle.length)) +
+    "</mark>" +
+    esc(text.slice(i + needle.length))
+  );
 }
 
 function runSearch(raw) {
-  const q = raw.trim().toLowerCase();
+  const q = raw.trim();
+
   if (!q) {
-    pHits = DB.notes.slice(0, 8);
+    pHits = DB.notes.slice(0, 8).map((n) => ({ doc: n, score: 0 }));
+  } else if (!SEARCH) {
+    pResults.innerHTML = `<li class="palette-empty">색인을 불러오는 중…</li>`;
+    loadSearch().then(() => {
+      if (pInput.value.trim() === q) runSearch(pInput.value);
+    });
+    return;
   } else {
-    pHits = DB.notes
-      .map((n) => {
-        const title = n.title.toLowerCase();
-        let score = 0;
-        if (title === q) score = 100;
-        else if (title.startsWith(q)) score = 60;
-        else if (title.includes(q)) score = 40;
-        else if (n.tags.some((t) => t.toLowerCase().includes(q))) score = 30;
-        else if (n.summary.toLowerCase().includes(q)) score = 20;
-        else if (n.search.includes(q)) score = 10;
-        return { n, score };
-      })
-      .filter((h) => h.score > 0)
-      .sort((a, b) => b.score - a.score || (a.n.date < b.n.date ? 1 : -1))
-      .slice(0, 12)
-      .map((h) => h.n);
+    pHits = bm25(q).slice(0, 12);
   }
+
   pSel = 0;
   pResults.innerHTML = pHits.length
     ? pHits
-        .map(
-          (n, i) => `<li class="${i === 0 ? "sel" : ""}"><a href="#/note/${encodeURIComponent(n.slug)}">
-        <span class="t"><span class="domain ${domainClass(n.domain)}">${esc(n.domain)}</span>${highlight(n.title, q)}</span>
-        ${n.summary ? `<span class="s">${highlight(n.summary, q)}</span>` : ""}
-      </a></li>`
-        )
+        .map(({ doc, coverage }, i) => {
+          const sn = q && doc.text !== undefined ? snippet(doc, q) : null;
+          const body = sn ? (sn.mark ? highlight(sn.text, sn.mark) : esc(sn.text)) : esc(doc.summary || "");
+          return `<li class="${i === 0 ? "sel" : ""}"><a href="#/note/${encodeURIComponent(doc.slug)}">
+        <span class="t">
+          <span class="domain ${domainClass(doc.domain)}">${esc(doc.domain)}</span>${esc(doc.title)}
+          ${coverage !== undefined && coverage < 0.999 ? `<span class="partial" title="질의어 일부만 일치">부분</span>` : ""}
+        </span>
+        ${body ? `<span class="s">${body}</span>` : ""}
+      </a></li>`;
+        })
         .join("")
     : `<li class="palette-empty">"${esc(raw)}" 에 맞는 노트가 없습니다.</li>`;
 }
@@ -630,7 +721,7 @@ pInput.addEventListener("keydown", (e) => {
   else if (e.key === "ArrowUp") { e.preventDefault(); moveSel(-1); }
   else if (e.key === "Enter" && pHits[pSel]) {
     e.preventDefault();
-    location.hash = `#/note/${encodeURIComponent(pHits[pSel].slug)}`;
+    location.hash = `#/note/${encodeURIComponent(pHits[pSel].doc.slug)}`;
     closePalette();
   }
 });
@@ -643,6 +734,7 @@ $("#search-open").addEventListener("click", openPalette);
 const capture = $("#capture");
 
 const REQUESTS = [
+  { ico: "💬", t: "물어보기", d: "vault 전체를 근거로 답합니다. 표현이 달라도 찾고, 인용을 답니다.", tpl: "ask.yml", title: "질문" },
   { ico: "🧠", t: "브레인덤프", d: "엉킨 생각을 그대로 던지면 도메인별로 쪼개 노트로 만듭니다.", tpl: "braindump.yml", title: "브레인덤프" },
   { ico: "📰", t: "데일리 브리프", d: "관심사 기반 뉴스 브리프. 출처와 신뢰도가 항목마다 붙습니다.", tpl: "daily-brief.yml", title: "데일리 브리프 요청" },
   { ico: "🔍", t: "위클리 리뷰", d: "지난 7일 노트를 교차 분석해 놓친 패턴을 찾습니다.", tpl: "weekly-review.yml", title: "위클리 리뷰 요청" },

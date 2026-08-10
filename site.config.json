@@ -11,6 +11,7 @@
     "02-areas": { "label": "Areas", "domain": "areas", "color": "teal", "hint": "계속 유지하는 영역" },
     "03-resources": { "label": "Resources", "domain": "resources", "color": "blue", "hint": "참고 자료와 프레임워크" },
     "04-archive": { "label": "Archive", "domain": "archive", "color": "slate", "hint": "끝났지만 보관" },
-    "05-daily": { "label": "Daily", "domain": "daily", "color": "rose", "hint": "일지와 브리프" }
+    "05-daily": { "label": "Daily", "domain": "daily", "color": "rose", "hint": "일지와 브리프" },
+    "07-answers": { "label": "Answers", "domain": "answers", "color": "green", "hint": "질문에 인용과 함께 답한 노트" }
   }
 }
