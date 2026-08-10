@@ -71,41 +71,56 @@ function loadSearch() {
 const K1 = 1.2;
 const B = 0.75;
 
-// 반환: [{ doc, score, coverage }] — 점수 내림차순.
+// 반환: { hits: [{doc, score, coverage}], weak } — 점수 내림차순.
+// weak = 질의어가 전부 흔한 말이라 노트를 가려낼 힘이 없는 상태.
 function bm25(query) {
-  if (!SEARCH || !SEARCH.docs.length) return [];
+  const empty = { hits: [], weak: false };
+  if (!SEARCH || !SEARCH.docs.length) return empty;
   const terms = [...new Set(tokenize(query))];
-  if (!terms.length) return [];
+  if (!terms.length) return empty;
 
   const N = SEARCH.docs.length;
   const score = new Map();
   const matched = new Map();
+  const hitTf = new Map();
+  let maxIdf = 0;
 
   for (const term of terms) {
     const post = SEARCH.postings[term];
     if (!post) continue;
     const idf = Math.log(1 + (N - post.length + 0.5) / (post.length + 0.5));
+    if (idf > maxIdf) maxIdf = idf;
     for (const [d, tf] of post) {
       const denom = tf + K1 * (1 - B + (B * SEARCH.docLen[d]) / SEARCH.avgdl);
       score.set(d, (score.get(d) || 0) + (idf * tf * (K1 + 1)) / denom);
       matched.set(d, (matched.get(d) || 0) + 1);
+      hitTf.set(d, (hitTf.get(d) || 0) + tf);
     }
   }
 
-  // 질의어를 더 많이 덮는 노트를 끌어올립니다. 이게 없으면 흔한 조각 하나가
-  // 여러 번 나온 노트가, 질의 대부분을 담은 노트를 이길 수 있습니다.
   const ranked = [...score.entries()]
     .map(([d, s]) => {
+      // 커버리지: 질의어를 더 많이 덮는 노트를 끌어올립니다. 이게 없으면 흔한 조각 하나가
+      // 여러 번 나온 노트가, 질의 대부분을 담은 노트를 이길 수 있습니다.
       const coverage = matched.get(d) / terms.length;
-      return { doc: SEARCH.docs[d], score: s * (0.4 + 0.6 * coverage), coverage };
+      // 밀도: 질의어가 그 노트에서 차지하는 비중. "그 주제를 다루는 노트"와
+      // "주제 목록에 한 줄 스쳐 지나가는 노트"를 가릅니다 — 데일리 브리프가
+      // interests.md의 주제를 매번 되풀이하기 때문에 이 보정이 없으면 전부 동점이 됩니다.
+      const density = hitTf.get(d) / Math.max(1, SEARCH.docLen[d]);
+      return {
+        doc: SEARCH.docs[d],
+        score: s * (0.4 + 0.6 * coverage) * Math.pow(density, 0.3),
+        coverage,
+      };
     })
     .sort((a, b) => b.score - a.score || (a.doc.date < b.doc.date ? 1 : -1));
 
-  // 바이그램 색인은 재현율이 높은 대신 약한 일치를 많이 끌고 옵니다.
-  // 1등 점수 대비 컷을 둬서 꼬리를 자릅니다 — 없으면 vault 대부분이 매번 결과로 나옵니다.
-  if (!ranked.length) return ranked;
+  if (!ranked.length) return empty;
+
+  // 컷은 "잡음 제거"만 맡습니다. 분량 조절은 팔레트의 상한이 따로 합니다 —
+  // 컷을 분량 조절에 쓰면 진짜 관련 있는 노트(예: 그 개념의 출처)까지 잘려 나갑니다.
   const cut = ranked[0].score * 0.3;
-  return ranked.filter((h) => h.score >= cut);
+  return { hits: ranked.filter((h) => h.score >= cut), weak: maxIdf < 1 };
 }
 
 // 원문에서 질의어가 실제로 등장하는 자리를 잘라 옵니다.
@@ -239,7 +254,7 @@ async function viewNotes(params) {
   // 질의가 있으면 목록도 팔레트와 같은 BM25 순위를 따릅니다 — 두 곳이 다르게 동작하면 헷갈립니다.
   if (q) {
     await loadSearch();
-    const rank = new Map(bm25(q).map((h, i) => [h.doc.slug, i]));
+    const rank = new Map(bm25(q).hits.map((h, i) => [h.doc.slug, i]));
     list = list.filter((n) => rank.has(n.slug)).sort((a, b) => rank.get(a.slug) - rank.get(b.slug));
   }
 
@@ -649,7 +664,10 @@ function initGraph() {
 const palette = $("#palette");
 const pInput = $("#palette-input");
 const pResults = $("#palette-results");
-let pSel = 0, pHits = [];
+const pNote = $("#palette-note");
+const pMoreEl = $("#palette-more");
+const PALETTE_MAX = 6;
+let pSel = 0, pHits = [], pMore = 0, pWeak = false;
 
 function openPalette() {
   palette.hidden = false;
@@ -678,6 +696,8 @@ function runSearch(raw) {
 
   if (!q) {
     pHits = DB.notes.slice(0, 8).map((n) => ({ doc: n, score: 0 }));
+    pMore = 0;
+    pWeak = false;
   } else if (!SEARCH) {
     pResults.innerHTML = `<li class="palette-empty">색인을 불러오는 중…</li>`;
     loadSearch().then(() => {
@@ -685,7 +705,10 @@ function runSearch(raw) {
     });
     return;
   } else {
-    pHits = bm25(q).slice(0, 12);
+    const r = bm25(q);
+    pHits = r.hits.slice(0, PALETTE_MAX);
+    pMore = r.hits.length - pHits.length;
+    pWeak = r.weak;
   }
 
   pSel = 0;
@@ -704,6 +727,21 @@ function runSearch(raw) {
         })
         .join("")
     : `<li class="palette-empty">"${esc(raw)}" 에 맞는 노트가 없습니다.</li>`;
+
+  // 스크롤 영역 밖에 둡니다 — 안에 넣으면 결과가 길 때 이 줄이 접혀서 안 보입니다.
+  pMoreEl.hidden = pMore <= 0;
+  if (pMore > 0) {
+    pMoreEl.href = `#/notes?q=${encodeURIComponent(q)}`;
+    pMoreEl.textContent = `비슷한 점수 ${pMore}건 더 — 목록에서 보기 →`;
+  }
+
+  // 결과를 몰래 줄이는 대신 왜 넓은지 알려 줍니다.
+  // 실제로 접었을 때(pMore>0)만 띄웁니다 — 상위 결과가 정확한데도 뜨면 잔소리가 됩니다.
+  const showNote = pWeak && pMore > 0;
+  pNote.textContent = showNote
+    ? "흔한 말이라 노트가 잘 갈리지 않습니다. 단어를 더 붙이면 좁혀집니다."
+    : "";
+  pNote.hidden = !showNote;
 }
 
 function moveSel(d) {
@@ -726,6 +764,7 @@ pInput.addEventListener("keydown", (e) => {
   }
 });
 pResults.addEventListener("click", (e) => { if (e.target.closest("a")) closePalette(); });
+pMoreEl.addEventListener("click", closePalette);
 
 $("#search-open").addEventListener("click", openPalette);
 
