@@ -47,3 +47,4 @@ source: seed
 
 [[cog-architecture]] — 이 구조의 출처
 [[interests]] — 데일리 브리프 입력
+[[에이전트-권한-경계-체크리스트]] — 이 파이프라인의 권한 경계를 점검하는 체크리스트 (2026-09 consolidate)
