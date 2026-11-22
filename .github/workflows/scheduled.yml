@@ -4,10 +4,10 @@ name: Claude Scheduled
 # 온디맨드 워크플로를 재사용하려면 이 파일 대신 그쪽 workflow_dispatch를 써도 됩니다.
 
 on:
-  schedule:
-    - cron: "0 21 * * *"   # 매일 06:00 KST — 데일리 브리프
-    - cron: "0 22 * * 0"   # 일요일 07:00 KST — 위클리 리뷰
-    - cron: "0 23 1 * *"   # 매월 1일 08:00 KST — 지식 통합
+  # schedule:
+    # - cron: "0 21 * * *"   # 매일 06:00 KST — 데일리 브리프
+    # - cron: "0 22 * * 0"   # 일요일 07:00 KST — 위클리 리뷰
+    # - cron: "0 23 1 * *"   # 매월 1일 08:00 KST — 지식 통합
   workflow_dispatch:
 
 concurrency:
